@@ -1,0 +1,28 @@
+{
+  "model_class": "TrafficSign",
+  "num_classes": 43,
+  "input_size": [
+    3,
+    32,
+    32
+  ],
+  "img_resize": 32,
+  "normalize_mean": [
+    0.3337,
+    0.3064,
+    0.3171
+  ],
+  "normalize_std": [
+    0.2672,
+    0.2564,
+    0.2629
+  ],
+  "pixel_min": -2.5,
+  "pixel_max": 2.5,
+  "attack": {
+    "fgsm_default_epsilon": 0.05,
+    "pgd_default_epsilon": 0.05,
+    "pgd_default_steps": 10,
+    "pgd_alpha_formula": "epsilon * 2.5 / pgd_steps"
+  }
+}

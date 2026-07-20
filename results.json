@@ -1,0 +1,8 @@
+{
+  "clean_clean": 96.75,
+  "clean_fgsm": 45.32,
+  "clean_pgd": 28.68,
+  "adv_clean": 95.49,
+  "adv_fgsm": 82.15,
+  "adv_pgd": 76.87
+}

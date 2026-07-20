@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrafficGuard — Adversarial Robustness Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & Root ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #050810;
+      --surface:     #0b1120;
+      --surface-2:   #111827;
+      --border:      #1e2d47;
+      --border-soft: #162038;
+      --amber:       #f5a623;
+      --amber-dim:   #c9841a;
+      --amber-glow:  rgba(245,166,35,.18);
+      --red:         #ff4757;
+      --red-glow:    rgba(255,71,87,.18);
+      --green:       #2ed573;
+      --green-glow:  rgba(46,213,115,.15);
+      --blue:        #3d9cf5;
+      --text:        #dce8f5;
+      --text-2:      #7b8da8;
+      --text-3:      #3e5070;
+      --radius:      12px;
+      --radius-sm:   8px;
+      --transition:  0.2s cubic-bezier(.4,0,.2,1);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background Grid ───────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(var(--border-soft) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-soft) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: -30vh; left: 50%;
+      transform: translateX(-50%);
+      width: 80vw; height: 60vh;
+      background: radial-gradient(ellipse at center, var(--amber-glow) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout Wrapper ────────────────────────────────────────────── */
+    .wrapper { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; }
+
+    /* ── Header ────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0 28px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Syne', sans-serif;
+      font-size: 20px; font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: var(--amber);
+      border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 18px;
+    }
+
+    .logo span { color: var(--amber); }
+
+    .header-badge {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: var(--text-2);
+      font-family: 'DM Mono', monospace;
+    }
+
+    .dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* ── Accuracy Banner ───────────────────────────────────────────── */
+    .stats-banner {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+
+    .stat-cell {
+      background: var(--surface);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: .08em;
+      color: var(--text-2);
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-value.good  { color: var(--green); }
+    .stat-value.warn  { color: var(--amber); }
+    .stat-value.bad   { color: var(--red); }
+    .stat-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+    /* ── Main Grid ─────────────────────────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    /* ── Panel Card ────────────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .panel-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+
+    .panel-icon { font-size: 14px; }
+    .panel-body { padding: 20px; }
+
+    /* ── Upload Zone ───────────────────────────────────────────────── */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-sm);
+      padding: 32px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #drop-zone:hover,
+    #drop-zone.drag-over {
+      border-color: var(--amber);
+      background: var(--amber-glow);
+    }
+
+    #drop-zone .upload-icon { font-size: 32px; margin-bottom: 8px; }
+
+    #drop-zone .upload-text {
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+
+    #drop-zone .upload-text strong {
+      color: var(--amber);
+      font-weight: 500;
+    }
+
+    #drop-zone input { display: none; }
+
+    /* Image preview inside drop zone */
+    .preview-wrap {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .preview-wrap.visible { display: flex; }
+
+    .preview-wrap img {
+      width: 120px; height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      image-rendering: pixelated;
+    }
+
+    .preview-filename {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text-2);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .change-btn {
+      font-size: 11px;
+      color: var(--amber);
+      background: none;
+      border: 1px solid var(--amber-dim);
+      border-radius: 4px;
+      padding: 3px 10px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .change-btn:hover { background: var(--amber-glow); }
+
+    /* ── Section label ─────────────────────────────────────────────── */
+    .section-label {
+      font-size: 11px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    /* ── Model Selector ────────────────────────────────────────────── */
+    .model-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .model-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .model-card input { display: none; }
+
+    .model-card:hover { border-color: var(--border); background: var(--surface-2); }
+
+    .model-card.selected {
+      border-color: var(--amber);
+      background: var(--amber-glow);
+    }
+
+    .model-card .model-name {
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .model-card .model-desc {
+      font-size: 11px;
+      color: var(--text-2);
+      line-height: 1.4;
+    }
+
+    .model-card .model-acc {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--green);
+      margin-top: 6px;
+    }
+
+    .model-check {
+      position: absolute;
+      top: 8px; right: 8px;
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 50%;
+      transition: var(--transition);
+    }
+
+    .model-card.selected .model-check {
+      background: var(--amber);
+      border-color: var(--amber);
+    }
+
+    .model-check::after {
+      content: '✓';
+      font-size: 10px;
+      color: var(--bg);
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -52%);
+    }
+
+    .model-card.selected .model-check::after { display: block; }
+
+    /* ── Attack Selector ───────────────────────────────────────────── */
+    .attack-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+      margin-bottom: 14px;
+    }
+
+    .attack-tab {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-2);
+      transition: var(--transition);
+      border: none;
+      background: none;
+      letter-spacing: .05em;
+    }
+
+    .attack-tab:hover { color: var(--text); }
+
+    .attack-tab.active {
+      background: var(--surface);
+      color: var(--amber);
+      border: 1px solid var(--border);
+    }
+
+    /* ── Slider ────────────────────────────────────────────────────── */
+    .slider-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .slider-row label { font-size: 12px; color: var(--text-2); }
+
+    .slider-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--amber);
+      font-weight: 500;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--amber);
+      cursor: pointer;
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 8px var(--amber-glow);
+    }
+
+    .attack-options { display: none; }
+    .attack-options.visible { display: block; }
+
+    /* ── Divider ───────────────────────────────────────────────────── */
+    .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+    /* ── Classify Button ───────────────────────────────────────────── */
+    #classify-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--amber);
+      color: #000;
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #classify-btn:hover:not(:disabled) {
+      background: #ffc547;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px var(--amber-glow);
+    }
+
+    #classify-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Spinner inside button */
+    .btn-spinner {
+      display: none;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(0,0,0,.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #classify-btn.loading .btn-text { display: none; }
+    #classify-btn.loading .btn-spinner { display: block; }
+
+    /* ── Results Panel ─────────────────────────────────────────────── */
+    .results-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 80px 40px;
+      color: var(--text-3);
+      text-align: center;
+    }
+
+    .results-empty .empty-icon { font-size: 48px; opacity: 0.4; }
+    .results-empty p { font-size: 13px; max-width: 260px; line-height: 1.6; }
+
+    /* Prediction card */
+    .pred-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .pred-card-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .pred-card-header .pred-source {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+
+    .pred-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .06em;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .pred-badge.clean  { background: var(--green-glow);  color: var(--green); }
+    .pred-badge.attack { background: var(--red-glow);    color: var(--red); }
+    .pred-badge.robust { background: var(--amber-glow);  color: var(--amber); }
+
+    .pred-body { padding: 16px 14px; }
+
+    .pred-class {
+      font-family: 'Syne', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      line-height: 1.2;
+    }
+
+    .pred-conf {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text-2);
+      margin-bottom: 12px;
+    }
+
+    .conf-bar-track {
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .conf-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s cubic-bezier(.4,0,.2,1);
+    }
+
+    .conf-bar-fill.good  { background: linear-gradient(90deg, #2ed573, #7bed9f); }
+    .conf-bar-fill.warn  { background: linear-gradient(90deg, var(--amber), #ffd573); }
+    .conf-bar-fill.bad   { background: linear-gradient(90deg, var(--red), #ff8080); }
+
+    /* Changed badge */
+    .changed-alert {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--red-glow);
+      border: 1px solid rgba(255,71,87,.3);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--red);
+      margin-bottom: 16px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .robust-alert {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--green-glow);
+      border: 1px solid rgba(46,213,115,.25);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--green);
+      margin-bottom: 16px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* Top-5 bars */
+    .top5-title {
+      font-size: 11px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 10px;
+    }
+
+    .top5-row {
+      display: grid;
+      grid-template-columns: 140px 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+
+    .top5-label {
+      font-size: 11px;
+      color: var(--text-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .top5-bar-track {
+      height: 5px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .top5-bar-fill {
+      height: 100%;
+      background: var(--amber);
+      border-radius: 3px;
+      transition: width 0.5s cubic-bezier(.4,0,.2,1);
+    }
+
+    .top5-bar-fill.red { background: var(--red); }
+
+    .top5-pct {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text-2);
+      text-align: right;
+    }
+
+    /* ── Two-col comparison ────────────────────────────────────────── */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* ── Error toast ───────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--red);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'DM Mono', monospace;
+      z-index: 999;
+      transition: transform 0.3s ease;
+      max-width: 90vw;
+      text-align: center;
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Fade-in animation ─────────────────────────────────────────── */
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .fadein { animation: fadein 0.35s ease forwards; }
+
+    /* ── Responsive ────────────────────────────────────────────────── */
+    @media (max-width: 800px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .stats-banner { grid-template-columns: 1fr; gap: 0; }
+      .comparison-grid { grid-template-columns: 1fr; }
+      header { flex-direction: column; gap: 12px; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- ── Header ────────────────────────────────────────────── -->
+  <header>
+    <a class="logo" href="#">
+      <div class="logo-icon">🚦</div>
+      Traffic<span>Guard</span>
+    </a>
+    <div class="header-badge">
+      <div class="dot"></div>
+      GTSRB · 43 classes · CNN
+    </div>
+  </header>
+
+  <!-- ── Accuracy Banner ────────────────────────────────────── -->
+  <div class="stats-banner">
+    <div class="stat-cell">
+      <span class="stat-label">Clean Accuracy</span>
+      <span class="stat-value good">96.75%</span>
+      <span class="stat-sub">Clean CNN → Clean images</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Under FGSM Attack</span>
+      <span class="stat-value bad">45.32%</span>
+      <span class="stat-sub">Clean CNN → FGSM (ε=0.05)</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Adversarial Defense</span>
+      <span class="stat-value warn">82.15%</span>
+      <span class="stat-sub">Robust CNN → FGSM (ε=0.05)</span>
+    </div>
+  </div>
+
+  <!-- ── Main Grid ──────────────────────────────────────────── -->
+  <div class="main-grid">
+
+    <!-- LEFT: Controls -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- Upload Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-icon">📷</span>
+          <span class="panel-title">Upload Image</span>
+        </div>
+        <div class="panel-body">
+          <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" accept="image/*" />
+            <div id="upload-prompt">
+              <div class="upload-icon">⬆</div>
+              <div class="upload-text">
+                <strong>Click to upload</strong> or drag & drop<br />
+                PNG, JPG, WEBP — any size
+              </div>
+            </div>
+            <div class="preview-wrap" id="preview-wrap">
+              <img id="preview-img" src="" alt="preview" />
+              <span class="preview-filename" id="preview-name"></span>
+              <button class="change-btn" onclick="clearImage(event)">Change</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-icon">🧠</span>
+          <span class="panel-title">Model</span>
+        </div>
+        <div class="panel-body">
+          <div class="model-grid">
+            <label class="model-card selected" id="card-clean">
+              <input type="radio" name="model" value="clean" checked />
+              <div class="model-name">Clean CNN</div>
+              <div class="model-desc">Standard training, no defense</div>
+              <div class="model-acc">96.75% clean acc.</div>
+              <div class="model-check"></div>
+            </label>
+            <label class="model-card" id="card-adversarial">
+              <input type="radio" name="model" value="adversarial" />
+              <div class="model-name">Robust CNN</div>
+              <div class="model-desc">Adversarially trained defense</div>
+              <div class="model-acc">95.49% clean acc.</div>
+              <div class="model-check"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attack Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-icon">⚡</span>
+          <span class="panel-title">Adversarial Attack</span>
+        </div>
+        <div class="panel-body">
+          <div class="attack-tabs">
+            <button class="attack-tab active" data-attack="none">None</button>
+            <button class="attack-tab" data-attack="fgsm">FGSM</button>
+            <button class="attack-tab" data-attack="pgd">PGD</button>
+          </div>
+
+          <div class="attack-options" id="attack-opts">
+            <div class="slider-row">
+              <label>Perturbation ε (epsilon)</label>
+              <span class="slider-val" id="eps-val">0.05</span>
+            </div>
+            <input type="range" id="eps-slider" min="0.01" max="0.30" step="0.01" value="0.05" />
+
+            <div style="margin-top:14px;" id="pgd-opts" style="display:none;">
+              <div class="slider-row">
+                <label>PGD Steps</label>
+                <span class="slider-val" id="pgd-val">10</span>
+              </div>
+              <input type="range" id="pgd-slider" min="5" max="40" step="5" value="10" />
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <button id="classify-btn" disabled>
+            <span class="btn-text">Classify</span>
+            <div class="btn-spinner"></div>
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /LEFT -->
+
+    <!-- RIGHT: Results -->
+    <div class="panel" id="results-panel">
+      <div class="panel-header">
+        <span class="panel-icon">📊</span>
+        <span class="panel-title">Results</span>
+      </div>
+      <div class="panel-body" id="results-body">
+
+        <div class="results-empty">
+          <div class="empty-icon">🛑</div>
+          <p>Upload a traffic sign image and click <strong>Classify</strong> to see predictions.</p>
+        </div>
+
+      </div>
+    </div><!-- /RIGHT -->
+
+  </div><!-- /main-grid -->
+
+</div><!-- /wrapper -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Config ────────────────────────────────────────────────────────────────
+  // Change this to your deployed API URL when running frontend separately
+  const API_URL = window.location.origin;
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let selectedFile = null;
+  let selectedAttack = 'none';
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const dropZone    = document.getElementById('drop-zone');
+  const fileInput   = document.getElementById('file-input');
+  const previewWrap = document.getElementById('preview-wrap');
+  const previewImg  = document.getElementById('preview-img');
+  const previewName = document.getElementById('preview-name');
+  const uploadPrompt= document.getElementById('upload-prompt');
+  const classifyBtn = document.getElementById('classify-btn');
+  const resultsBody = document.getElementById('results-body');
+  const attackOpts  = document.getElementById('attack-opts');
+  const pgdOpts     = document.getElementById('pgd-opts');
+  const epsSlider   = document.getElementById('eps-slider');
+  const epsVal      = document.getElementById('eps-val');
+  const pgdSlider   = document.getElementById('pgd-slider');
+  const pgdVal      = document.getElementById('pgd-val');
+
+  // ── Drag & Drop ───────────────────────────────────────────────────────────
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
+
+  function setFile(f) {
+    selectedFile = f;
+    const url = URL.createObjectURL(f);
+    previewImg.src = url;
+    previewName.textContent = f.name;
+    uploadPrompt.style.display = 'none';
+    previewWrap.classList.add('visible');
+    classifyBtn.disabled = false;
+  }
+
+  function clearImage(e) {
+    e.stopPropagation();
+    selectedFile = null;
+    fileInput.value = '';
+    previewWrap.classList.remove('visible');
+    uploadPrompt.style.display = '';
+    classifyBtn.disabled = true;
+    showEmpty();
+  }
+
+  // ── Model selector ────────────────────────────────────────────────────────
+  document.querySelectorAll('.model-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+
+  // ── Attack tabs ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.attack-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.attack-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      selectedAttack = tab.dataset.attack;
+      attackOpts.classList.toggle('visible', selectedAttack !== 'none');
+      if (pgdOpts) pgdOpts.style.display = selectedAttack === 'pgd' ? 'block' : 'none';
+    });
+  });
+
+  // ── Sliders ───────────────────────────────────────────────────────────────
+  epsSlider.addEventListener('input', () => { epsVal.textContent = parseFloat(epsSlider.value).toFixed(2); });
+  pgdSlider.addEventListener('input', () => { pgdVal.textContent = pgdSlider.value; });
+
+  // ── Classify ──────────────────────────────────────────────────────────────
+  classifyBtn.addEventListener('click', classify);
+
+  async function classify() {
+    if (!selectedFile) return;
+
+    // UI: loading state
+    classifyBtn.classList.add('loading');
+    classifyBtn.disabled = true;
+
+    const modelType = document.querySelector('input[name=model]:checked').value;
+    const epsilon   = parseFloat(epsSlider.value);
+    const pgdSteps  = parseInt(pgdSlider.value);
+
+    const formData = new FormData();
+    formData.append('file',       selectedFile);
+    formData.append('model_type', modelType);
+    formData.append('attack',     selectedAttack);
+    formData.append('epsilon',    epsilon);
+    formData.append('pgd_steps',  pgdSteps);
+
+    try {
+      const res = await fetch(`${API_URL}/predict`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Server error' }));
+        showToast(err.detail || 'Prediction failed');
+        return;
+      }
+      const data = await res.json();
+      renderResults(data);
+    } catch (err) {
+      showToast('Cannot reach API — is the backend running?');
+    } finally {
+      classifyBtn.classList.remove('loading');
+      classifyBtn.disabled = false;
+    }
+  }
+
+  // ── Render Results ────────────────────────────────────────────────────────
+  function renderResults(data) {
+    const { clean, adversarial, attack_applied, model_type, epsilon } = data;
+    const hasAttack = !!adversarial;
+
+    let html = '<div class="fadein">';
+
+    if (hasAttack) {
+      // Comparison mode
+      if (adversarial.prediction_changed) {
+        html += `<div class="changed-alert">
+          ⚠ Prediction changed under ${attack_applied.toUpperCase()} attack (ε=${epsilon?.toFixed(2)})
+        </div>`;
+      } else {
+        html += `<div class="robust-alert">
+          ✓ Prediction held under ${attack_applied.toUpperCase()} attack (ε=${epsilon?.toFixed(2)})
+        </div>`;
+      }
+      html += '<div class="comparison-grid">';
+      html += buildPredCard(clean,      'Clean Input',      'clean', false);
+      html += buildPredCard(adversarial, `${attack_applied.toUpperCase()} Attack`, 'attack', adversarial.prediction_changed);
+      html += '</div>';
+    } else {
+      html += buildPredCard(clean, model_type === 'clean' ? 'Clean CNN' : 'Robust CNN', 'clean', false);
+    }
+
+    // Top-5 (always show clean)
+    html += `<div style="margin-top:20px;">
+      <div class="top5-title">Top-5 Predictions — Clean</div>`;
+    clean.top5.forEach((item, i) => {
+      html += `
+        <div class="top5-row">
+          <div class="top5-label" title="${item.class}">${item.class}</div>
+          <div class="top5-bar-track">
+            <div class="top5-bar-fill${i===0?'':' red'}" style="width:${item.confidence}%"></div>
+          </div>
+          <div class="top5-pct">${item.confidence}%</div>
+        </div>`;
+    });
+    html += '</div>';
+
+    if (hasAttack) {
+      html += `<div style="margin-top:16px;">
+        <div class="top5-title">Top-5 Predictions — ${attack_applied.toUpperCase()}</div>`;
+      adversarial.top5.forEach((item, i) => {
+        html += `
+          <div class="top5-row">
+            <div class="top5-label" title="${item.class}">${item.class}</div>
+            <div class="top5-bar-track">
+              <div class="top5-bar-fill${i===0?' red':''}" style="width:${item.confidence}%"></div>
+            </div>
+            <div class="top5-pct">${item.confidence}%</div>
+          </div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+    resultsBody.innerHTML = html;
+  }
+
+  function buildPredCard(pred, sourceLabel, type, changed) {
+    const conf = pred.confidence;
+    const barClass = conf >= 70 ? 'good' : conf >= 40 ? 'warn' : 'bad';
+    const badgeClass = type === 'attack' ? (changed ? 'attack' : 'robust') : 'clean';
+    const badgeText  = type === 'attack' ? (changed ? '⚠ FOOLED' : '✓ ROBUST') : '✓ CLEAN';
+
+    return `
+      <div class="pred-card">
+        <div class="pred-card-header">
+          <span class="pred-source">${sourceLabel}</span>
+          <span class="pred-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="pred-body">
+          <div class="pred-class">${pred.predicted_class}</div>
+          <div class="pred-conf">Confidence: ${conf}%</div>
+          <div class="conf-bar-track">
+            <div class="conf-bar-fill ${barClass}" style="width:${conf}%"></div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function showEmpty() {
+    resultsBody.innerHTML = `
+      <div class="results-empty">
+        <div class="empty-icon">🛑</div>
+        <p>Upload a traffic sign image and click <strong>Classify</strong> to see predictions.</p>
+      </div>`;
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+</script>
+</body>
+</html>

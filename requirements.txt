@@ -1,0 +1,14 @@
+# Traffic Sign Classifier — Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework (used by app.py)
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+
+# Deep learning
+torch==2.4.1           # CPU-only build; swap for a CUDA build to use a GPU
+torchvision==0.19.1
+
+# Image processing
+Pillow==11.0.0
