@@ -1,127 +1,159 @@
-# TrafficGuard : Traffic Sign Recognition
+# Traffic Sign Classifier
 
-A CNN-based traffic sign classifier [GTSRB](https://www.kaggle.com/datasets/meowmeowmeowmeowmeow/gtsrb-german-traffic-sign), 43 classes that demonstrates how
-adversarial attacks can silently break a "clean" image classifier and how
-adversarial training defends against it.
+Built on GTSRB (43 classes). Demonstrates adversarial attacks (FGSM, PGD) and defense via adversarial training.
 
-Two identical CNNs are trained on the same data: one with standard training,
-one with adversarial training. Both are attacked with **FGSM** and **PGD**
-at inference time so the difference in robustness is directly visible.
+---
 
-## Why this exists
-
-Traffic sign recognition is a canonical example of a safety-critical
-vision system. A model that scores 96%+ accuracy on clean images can still
-be fooled by a human-imperceptible pixel perturbation, this project
-measures exactly how much, and shows a concrete mitigation (adversarial
-training) rather than just stating the vulnerability exists.
-
-## Results
-
-| Scenario                         | Accuracy |
-|-----------------------------------|:--------:|
-| Clean CNN → clean images          | 96.75%   |
-| Clean CNN → FGSM (ε=0.05)         | 45.32%   |
-| Clean CNN → PGD (ε=0.05)          | 28.68%   |
-| Adversarial CNN → clean images    | 95.49%   |
-| Adversarial CNN → FGSM (ε=0.05)   | 82.15%   |
-| Adversarial CNN → PGD (ε=0.05)    | 76.87%   |
-
-Adversarial training costs ~1.3 points of clean accuracy but recovers
-**+37 points** of robustness under FGSM and **+48 points** under PGD.
-
-## Project structure
+## Project Structure
 
 ```
-├── app.py              # FastAPI backend: /predict, /stats, /health + web UI
-├── predict.py           # Standalone CLI: classify one image, no server needed
-├── requirements.txt
-├── class_names.json     # 43 GTSRB class labels
-├── model_config.json    # Architecture / preprocessing / attack hyperparameters
-├── results.json         # Benchmark numbers used by /stats and the table above
+trafficsign-app/
+├── app.py                  ← FastAPI backend (inference + attacks)
+├── requirements.txt        ← Python dependencies
+├── class_names.json        ← 43 GTSRB class names
+├── model_config.json       ← Architecture & preprocessing params
+├── results.json            ← Pre-computed benchmark results
 ├── models/
-│   ├── clean_model.pth        # Standard training
-│   └── adversarial_model.pth  # Adversarial (FGSM/PGD) training
-├── examples/             # Sample GTSRB images for a quick test drive
+│   ├── clean_model.pth         ← Standard CNN (96.75% clean acc.)
+│   └── adversarial_model.pth   ← Robust CNN (82.15% under FGSM)
 └── static/
-    └── index.html        # Zero-dependency frontend for app.py
+    └── index.html          ← Frontend UI (zero dependencies)
 ```
 
-## How it works
+---
 
-- **Architecture** : a 3-block CNN (Conv → BatchNorm → ReLU, ×2 per block,
-  MaxPool + Dropout between blocks) followed by a fully connected classifier
-  head. Trained at 32×32 resolution on GTSRB.
-- **FGSM** (Goodfellow et al., 2015), a single-step attack that perturbs
-  every pixel by `epsilon` in the direction of the loss gradient's sign.
-- **PGD** (Madry et al., 2018), the iterative version of FGSM: multiple
-  small steps with projection back into an `epsilon`-ball around the
-  original image, a much stronger attack.
-- **Adversarial training** : the "robust" model is trained on PGD-perturbed
-  examples in addition to clean ones, so it learns a decision boundary that
-  isn't as sensitive to small, worst-case perturbations.
-
-## Quick start
+## Run Locally
 
 ```bash
-git clone https://github.com/SherryCodes911/traffic-sign-adversarial-app
+# 1. Clone / copy this folder
+cd trafficsign-app
 
+# 2. Create virtual environment
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
+# 3. Install dependencies
 pip install -r requirements.txt
-```
 
-### Option A: CLI (fastest way to try it)
-
-```bash
-python predict.py examples/sample_1.png
-python predict.py examples/sample_1.png --attack fgsm --epsilon 0.05
-python predict.py examples/sample_1.png --attack pgd --epsilon 0.05 --pgd-steps 10
-python predict.py examples/sample_1.png --model adversarial --attack fgsm
-```
-
-### Option B: Web UI
-
-```bash
+# 4. Start server
 python app.py
-# or: uvicorn app:app --reload --port 8000
+# OR
+uvicorn app:app --reload --port 8000
+
+# 5. Open browser
+open http://localhost:8000
 ```
 
-Then open **http://localhost:8000** and upload an image to compare the
-clean and adversarial models side by side, with an adjustable attack
-strength.
+---
 
-## API reference (`app.py`)
+## Deploy — Option A: Render (Recommended, Full-Stack)
 
-| Endpoint   | Method | Description                                   |
-|------------|--------|------------------------------------------------|
-| `/health`  | GET    | Server status and which models are loaded.     |
-| `/stats`   | GET    | Pre-computed benchmark accuracy (table above).  |
-| `/predict` | POST   | Classify an image, optionally under attack.     |
+> Render runs Python natively. Free tier available.
 
-**`POST /predict` form fields**
+1. Push this folder to GitHub
+2. Go to **https://render.com** → New Web Service
+3. Connect your repo
+4. Settings:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+   - **Runtime**: Python 3.11
+5. Deploy → copy your `https://xxxx.onrender.com` URL
 
-| Field        | Type   | Default   | Description                        |
-|--------------|--------|-----------|-------------------------------------|
-| `file`       | File   | required  | Image file (PNG/JPG/WEBP)          |
-| `model_type` | string | `clean`   | `clean` or `adversarial`           |
-| `attack`     | string | `none`    | `none`, `fgsm`, or `pgd`           |
-| `epsilon`    | float  | `0.05`    | Perturbation magnitude (0.001–0.5) |
-| `pgd_steps`  | int    | `10`      | PGD iteration count (1–100)        |
+---
 
+## Deploy — Option B: Railway
+
+```bash
+# Install Railway CLI
+npm i -g @railway/cli
+
+railway login
+railway init
+railway up
+```
+
+---
+
+## Deploy — Option C: Vercel (Frontend) + Render (Backend)
+
+If you want the frontend on Vercel's CDN:
+
+1. Deploy backend to Render (see Option A)
+2. In `static/index.html`, update:
+   ```js
+   const API_URL = 'https://your-render-url.onrender.com';
+   ```
+3. Deploy static folder to Vercel:
+   ```bash
+   npx vercel --prod
+   ```
+
+---
+
+## API Reference
+
+### `GET /health`
+Returns server status and loaded models.
+
+### `GET /stats`
+Returns pre-computed benchmark accuracy results.
+
+### `POST /predict`
+Classify an image with optional adversarial attack.
+
+**Form fields:**
+
+| Field       | Type   | Default       | Description                          |
+|-------------|--------|---------------|--------------------------------------|
+| `file`      | File   | required      | Image file (PNG/JPG/WEBP)            |
+| `model_type`| string | `"clean"`     | `"clean"` or `"adversarial"`         |
+| `attack`    | string | `"none"`      | `"none"`, `"fgsm"`, or `"pgd"`       |
+| `epsilon`   | float  | `0.05`        | Perturbation magnitude (0.001–0.5)   |
+| `pgd_steps` | int    | `10`          | PGD iteration count (1–100)          |
+
+**Response:**
 ```json
 {
   "model_type": "clean",
   "attack_applied": "fgsm",
   "epsilon": 0.05,
-  "clean":       { "predicted_class": "Stop", "class_id": 14, "confidence": 97.34, "top5": [...] },
-  "adversarial": { "predicted_class": "No entry", "class_id": 17, "confidence": 61.2, "top5": [...], "prediction_changed": true }
+  "clean": {
+    "predicted_class": "Stop",
+    "class_id": 14,
+    "confidence": 97.34,
+    "top5": [...]
+  },
+  "adversarial": {
+    "predicted_class": "No entry",
+    "class_id": 17,
+    "confidence": 61.2,
+    "top5": [...],
+    "prediction_changed": true
+  }
 }
 ```
 
-## References
+---
 
-- Goodfellow, I. et al. (2015). *Explaining and Harnessing Adversarial Examples.*
-- Madry, A. et al. (2018). *Towards Deep Learning Models Resistant to Adversarial Attacks.*
-- Stallkamp, J. et al. *The German Traffic Sign Recognition Benchmark (GTSRB).*
+## Benchmark Results
+
+| Scenario                         | Accuracy |
+|----------------------------------|----------|
+| Clean CNN → Clean images         | 96.75%   |
+| Clean CNN → FGSM (ε=0.05)        | 45.32%   |
+| Clean CNN → PGD (ε=0.05)         | 28.68%   |
+| Adversarial CNN → Clean images   | 95.49%   |
+| Adversarial CNN → FGSM (ε=0.05)  | 82.15%   |
+| Adversarial CNN → PGD (ε=0.05)   | 76.87%   |
+
+---
+
+## Why PyTorch ≠ Vercel Serverless
+
+Vercel serverless functions have a 250 MB unzipped limit.
+PyTorch CPU wheel alone is ~750 MB, which exceeds this.
+
+**Solutions:**
+- ✅ Use Render / Railway / Fly.io for the backend (no size limit)
+- ✅ Use Vercel only for the static frontend
+- 🔧 (Advanced) Convert models to ONNX + use `onnxruntime` (~12 MB)
